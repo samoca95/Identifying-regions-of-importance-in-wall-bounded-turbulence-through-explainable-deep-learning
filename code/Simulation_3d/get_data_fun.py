@@ -16,7 +16,6 @@ class get_data_norm():
     """
     Class for getting the normalization
     """
-    
     def __init__(self,file_read='../../data/P125_21pi_vu/P125_21pi_vu',\
                  rey=125,vtau=0.060523258443963,pond='none'):
         """ 
@@ -217,11 +216,15 @@ class get_data_norm():
         """
         Function for saving the value of the mean velocity
         """
-        file_save = open(file, "w+")           
+        # Open the file
+        file_save = open(file, "w+")  
+        # Horizontal velocity         
         content = str(self.UUmean.tolist())+'\n'
-        file_save.write(content)          
+        file_save.write(content)         
+        # Vertical velocity 
         content = str(self.VVmean.tolist())+'\n'
-        file_save.write(content)          
+        file_save.write(content)  
+        # Transversal velocity        
         content = str(self.WWmean.tolist())+'\n'
         file_save.write(content)
         
@@ -242,27 +245,42 @@ class get_data_norm():
         Function for calculating the rms of the velocity components and the 
         product of the velocity fluctuations
         """
+
+        # Calculate the rms (root mean square) of u,v,w and uv, vw, uw
+        # for each horizontal plane (we take all data fields into account)
         for ii in range(start,end):
+
+            # Read the local file
             file_ii = self.file+'.'+str(ii)+'.h5.uvw'
             print('RMS velocity calculation:' + str(file_ii))
             file = h5py.File(file_ii,'r+')
+
+            # Extract the instant velocity 
             UU = np.array(file['u'])[::self.delta_y,\
                          ::self.delta_z,::self.delta_x]
+            
+            # Calculate the fluctuation
+            # Vmean and Wmean are close to zero, so we use the instant as fluc
             try:
-                uu = UU-self.UUmean.reshape(-1,1,1)
-            except:
+                uu = UU-self.UUmean.reshape(-1,1,1) # (ny,nz,nx)-(ny,1,1)=(ny,nz,nx)
+            except:  # Load the previously created file if it was not created in this run
                 self.read_Umean(umeanfile)
                 uu = UU-self.UUmean.reshape(-1,1,1)
             vv = np.array(file['v'])[::self.delta_y,\
                          ::self.delta_z,::self.delta_x]
             ww = np.array(file['w'])[::self.delta_y,\
                          ::self.delta_z,::self.delta_x]
+
+            # rms = sqrt(mean(u^2))
+            # Start calculating the square of the fluc for the current timestep for every element
             uu2 = np.multiply(uu,uu)
             vv2 = np.multiply(vv,vv)
             ww2 = np.multiply(ww,ww)
             uv  = np.multiply(uu,vv)
             vw  = np.multiply(vv,ww)
             uw  = np.multiply(uu,ww)
+            # We will make the average for every horizontal plane
+            # Here we keep a cummulative of all horizontal planes of all solutions
             if ii == start:
                 uu2_cum = np.sum(uu2,axis=(1,2))
                 vv2_cum = np.sum(vv2,axis=(1,2))
@@ -270,6 +288,7 @@ class get_data_norm():
                 uv_cum  = np.sum(uv,axis=(1,2))
                 vw_cum  = np.sum(vw,axis=(1,2))
                 uw_cum  = np.sum(uw,axis=(1,2))
+                # How many points where used for each horizontal plane
                 nn_cum = np.ones((self.my,))*self.mx*self.mz
             else:
                 uu2_cum += np.sum(uu2,axis=(1,2))
@@ -279,13 +298,14 @@ class get_data_norm():
                 vw_cum  += np.sum(vw,axis=(1,2))
                 uw_cum  += np.sum(uw,axis=(1,2))
                 nn_cum += np.ones((self.my,))*self.mx*self.mz
-        self.uurms = np.sqrt(np.divide(uu2_cum,nn_cum))    
-        self.vvrms = np.sqrt(np.divide(vv2_cum,nn_cum))   
-        self.wwrms = np.sqrt(np.divide(ww2_cum,nn_cum)) 
-        self.uv    = np.divide(uv_cum,nn_cum)
-        self.vw    = np.divide(vw_cum,nn_cum)
-        self.uw    = np.divide(uw_cum,nn_cum)
         
+        # Once all the fields have been read, calculate the horizontal averages and the rms
+        self.uurms = np.sqrt(np.divide(uu2_cum,nn_cum))  # (ny,)
+        self.vvrms = np.sqrt(np.divide(vv2_cum,nn_cum))  # (ny,)   
+        self.wwrms = np.sqrt(np.divide(ww2_cum,nn_cum))  # (ny,) 
+        self.uv    = np.divide(uv_cum,nn_cum)  # (ny,)
+        self.vw    = np.divide(vw_cum,nn_cum)  # (ny,)
+        self.uw    = np.divide(uw_cum,nn_cum)  # (ny,)
         
     def plot_Urms(self,reference='../../data/Simulation_3d/Re180.prof.txt'):
         """
@@ -422,7 +442,6 @@ class get_data_norm():
         plt.tight_layout()
         plt.savefig('../../results/Simulation_3d/uw.png')
         
-        
     def save_Urms(self,file="../../results/Simulation_3d/Urms.txt"):
         """
         Function for saving the value of the rms velocity
@@ -459,14 +478,17 @@ class get_data_norm():
         self.uw = np.array(file_read.readline().replace('[','').\
                            replace(']','').split(','),dtype='float')
      
-
     def read_velocity(self,ii,padpix=0): 
         """
         Function for read the velocity fluctuation
         """        
+
+        # Read the desired solution field
         file_ii = self.file+'.'+str(ii)+'.h5.uvw'
         print('Normalization velocity calculation:' + str(file_ii))
         file = h5py.File(file_ii,'r+')    
+
+        # Obtain the velocity fluctuations
         UU = np.array(file['u'])[::self.delta_y,\
                      ::self.delta_z,::self.delta_x]
         uu = UU-self.UUmean.reshape(-1,1,1)
@@ -474,38 +496,57 @@ class get_data_norm():
                      ::self.delta_z,::self.delta_x]
         ww = np.array(file['w'])[::self.delta_y,\
                      ::self.delta_z,::self.delta_x] 
+
+        # Pad the horizontal planes (e.g., if padpix=2, we add 2 elements in -x, +x, -z, +z)
         if padpix > 0:
+            # First, what are the current dimensions?
             fshape = uu.shape
             dim0 = fshape[0]
             dim1 = fshape[1]
             dim2 = fshape[2]
+
+            # Create a matrix with the dimensions we will have after padding
             uu_pad = np.zeros((dim0,dim1+2*padpix,dim2+2*padpix))
             vv_pad = np.zeros((dim0,dim1+2*padpix,dim2+2*padpix))
             ww_pad = np.zeros((dim0,dim1+2*padpix,dim2+2*padpix))
+
+            # Fill it with the data we already have (pad, data...data, pad)
             uu_pad[:,padpix:-padpix,padpix:-padpix] = uu.copy()
+            # Fill -z_pad with the information from +z_orig (periodic)
             uu_pad[:,:padpix,padpix:-padpix] = uu[:,-padpix:,:]
+            # Fill +z_pad with the information from -z_orig (periodic)
             uu_pad[:,-padpix:,padpix:-padpix] = uu[:,:padpix,:]
+            # Fill -x_pad with +x_orig (already z-padded) (periodic)
             uu_pad[:,:,:padpix] = uu_pad[:,:,-2*padpix:-padpix]
+            # Fill +x_pad with -x_orig (already z-padded) (periodic)
             uu_pad[:,:,-padpix:] = uu_pad[:,:,padpix:2*padpix]
+
+            # Repeat for vertical and trasnsversal velocities
+            # Vertical
             vv_pad[:,padpix:-padpix,padpix:-padpix] = vv.copy()
             vv_pad[:,:padpix,padpix:-padpix] = vv[:,-padpix:,:]
             vv_pad[:,-padpix:,padpix:-padpix] = vv[:,:padpix,:]
             vv_pad[:,:,:padpix] = vv_pad[:,:,-2*padpix:-padpix]
             vv_pad[:,:,-padpix:] = vv_pad[:,:,padpix:2*padpix]
+            # Transversal
             ww_pad[:,padpix:-padpix,padpix:-padpix] = ww.copy()
             ww_pad[:,:padpix,padpix:-padpix] = ww[:,-padpix:,:]
             ww_pad[:,-padpix:,padpix:-padpix] = ww[:,:padpix,:]
             ww_pad[:,:,:padpix] = ww_pad[:,:,-2*padpix:-padpix]
             ww_pad[:,:,-padpix:] = ww_pad[:,:,padpix:2*padpix]
+            
+            # Save the padded arrays as the new fluctuation arrays
             uu = uu_pad.copy()
             vv = vv_pad.copy()
             ww = ww_pad.copy()
+
         return uu,vv,ww
                 
     def calc_norm(self,start,end,umeanfile="../../results/Simulation_3d/Umean.txt"):
         """
         Function for calculating the normalization of u, v, w
         """
+        # Load or calc the mean values if they were not calculated in this run
         try:
             self.UUmean 
         except:
@@ -513,12 +554,18 @@ class get_data_norm():
                 self.read_Umean(umeanfile)
             except:
                 self.calc_Umean(start,end)
+
         for ii in range(start,end):
-            uu_i0,vv_i0,ww_i0 = self.read_velocity(ii)
-            uu_i1,vv_i1,ww_i1 = self.read_velocity(ii+1)
+            # Calculate the fluctuation with additional padding if desired (see funntion)
+            uu_i0,vv_i0,ww_i0 = self.read_velocity(ii)  # padding = 0 by default
+            uu_i1,vv_i1,ww_i1 = self.read_velocity(ii+1)  # padding = 0 by default
+            # Calculate also the Reynold stress components
             uv_i0 = np.multiply(uu_i0,vv_i0)
             vw_i0 = np.multiply(vv_i0,ww_i0)
             uw_i0 = np.multiply(uu_i0,ww_i0)
+            
+            # Obtain the absolute maximum and minimum for each component
+            # along all solution fields 
             if ii == start:
                 self.uumax = np.max(uu_i0)
                 self.vvmax = np.max(vv_i0)
@@ -575,18 +622,18 @@ class get_data_norm():
         file_save.write(content)    
         content = str(self.uwmin)+'\n'
         file_save.write(content)         
-#        content = str(self.uudmax)+'\n'
-#        file_save.write(content)    
-#        content = str(self.vvdmax)+'\n'
-#        file_save.write(content)    
-#        content = str(self.wwdmax)+'\n'
-#        file_save.write(content)          
-#        content = str(self.uudmin)+'\n'
-#        file_save.write(content)    
-#        content = str(self.vvdmin)+'\n'
-#        file_save.write(content)    
-#        content = str(self.wwdmin)+'\n'
-#        file_save.write(content) 
+        # content = str(self.uudmax)+'\n'
+        # file_save.write(content)    
+        # content = str(self.vvdmax)+'\n'
+        # file_save.write(content)    
+        # content = str(self.wwdmax)+'\n'
+        # file_save.write(content)          
+        # content = str(self.uudmin)+'\n'
+        # file_save.write(content)    
+        # content = str(self.vvdmin)+'\n'
+        # file_save.write(content)    
+        # content = str(self.wwdmin)+'\n'
+        # file_save.write(content) 
                 
     def read_norm(self,file="../../results/Simulation_3d/norm.txt"):
         """
@@ -617,9 +664,7 @@ class get_data_norm():
                               replace(']','').split(','),dtype='float')
         self.uwmin = np.array(file_read.readline().replace('[','').\
                               replace(']','').split(','),dtype='float')
-                
-    
-                
+                  
     def trainvali_data(self,index,ts=0.2,umeanfile="../../results/Simulation_3d/Umean.txt",\
                        normfile="../../results/Simulation_3d/norm.txt",delta_pred=1,padpix=0):
         
@@ -675,8 +720,7 @@ class get_data_norm():
         vel_data[0,:,:,:,1] = vnorm
         vel_data[0,:,:,:,2] = wnorm
         return vel_data
-    
-        
+     
     def dimensional_velocity(self,normfield,normfile="../../results/Simulation_3d/norm.txt"):
         """
         Function for transform the velocity to dimensional values
@@ -702,32 +746,50 @@ class get_data_norm():
             velfield = np.sign(velfield)*np.sqrt(abs(velfield))
         return velfield
     
-
     def uvstruc_solve(self,ii,umeanfile="../../results/Simulation_3d/Umean.txt",urmsfile="../../results/Simulation_3d/Urms.txt",\
                       Hperc=1.75): 
         """
         Function for defining the Q structures in the domain
         """  
+
+        # Load or calc the mean values if they were not calculated in this run
         try:
             self.UUmean 
         except:
             self.read_Umean(umeanfile)
+
+        # Obtain the velocity fluctuations
         uu,vv,ww = self.read_velocity(ii) 
+
+        # Instaneous value of the Reynolds stress (left-hand-side of eq. above)
         uv = abs(np.multiply(uu,vv))
+        # Product of the standard deviation of u and v (right-hand-side of eq.)
         try:
             uvi = np.multiply(self.uurms,self.vvrms) 
         except:
             self.read_Urms(urmsfile)
             uvi = np.multiply(self.uurms,self.vvrms)
-        # Calculate where is the structure
+        
+        # Calculate where is the structure satisfying the inequality
+        # The heavyside is a step function being used as an "iso-volume"
+        #                       0  if x1 < 0
+        # heavyside(x1, x2) =  x2  if x1 == 0
+        #                       0  if x1 > 0
         mat_struc = np.heaviside(uv-Hperc*uvi.reshape(-1,1,1),0)
-        # Calculate the structure properties
+
+        # Calculate the structure's properties based on the Q event structure obtained
+        # Create the object and initialize it with the obtained structure
         uv_str = uvstruc(mat_struc)
+        # Cluster the different indepent structures and store their nodes by their indices
         uv_str.get_cluster_3D6P(uu=uu,vv=vv,flagdiv=1)
+        # Calculate the volume and cdg of each structure
         uv_str.get_volume_cluster_box(self.y_h,self.dx,self.dz,\
                                       self.mx,self.mz,self.vol)
+        # Label by event type (outward, ejection, inward, sweep)
         uv_str.geo_char(uu,vv,self.vol,self.mx,self.my,self.mz)
+        # Label each point of the domain with the number of structure they are part of
         uv_str.segmentation(self.mx,self.my,self.mz)
+
         return uv_str
         
     def calc_uvstruc(self,start,end,umeanfile="../../results/Simulation_3d/Umean.txt",urmsfile="../../results/Simulation_3d/Urms.txt",\
@@ -735,31 +797,48 @@ class get_data_norm():
                      fold='../../results/P125_21pi_vu_Q'):
         """
         Function for calculating the uv structures
-        """       
+        """ 
+        # Calculate the structures for each solution field     
         for ii in range(start,end):
+            # Calculate the uv structures (see function and class below)
             uv_str = self.uvstruc_solve(ii)
             try:
-#                from os import mkdir
                 os.mkdir(fold)
             except:
                 pass
+
+            # Create a file to store the current solution structures
             hf = h5py.File(fileQ+'.'+str(ii)+'.h5.Q', 'w')
+
+            # Save all the calculated characteristics ton the file
+            # Value from the inequiality (ny, nz, nx)
             hf.create_dataset('Qs', data=uv_str.mat_struc)
+            # Type of event asociated to each point of the domain (ny, nz, nx)
             hf.create_dataset('Qs_event', data=uv_str.mat_event)
+            # Structure associated to each point of the domain (ny, nz, nx)
             hf.create_dataset('Qs_segment', data=uv_str.mat_segment)
+            # Streamwise dimension of each structure (n_str,)
             hf.create_dataset('dx', data=uv_str.dx)
+            # Transversal dimension of each structure (n_str,)
             hf.create_dataset('dz', data=uv_str.dz)
+            # Vertical coordintaes of each structure (n_str,)
             hf.create_dataset('ymin', data=uv_str.ymin)
             hf.create_dataset('ymax', data=uv_str.ymax)
+            # Volume of each structure (n_str,)
             hf.create_dataset('vol', data=uv_str.vol)
+            # Box volume of each structure (n_str,)
             hf.create_dataset('volbox', data=uv_str.boxvol)
+            # Box center of gravity of each structure (n_str,)
             hf.create_dataset('cdg_xbox', data=uv_str.cdg_xbox)
             hf.create_dataset('cdg_ybox', data=uv_str.cdg_ybox)
             hf.create_dataset('cdg_zbox', data=uv_str.cdg_zbox)
+            # Center of gravity of each structure (n_str,)
             hf.create_dataset('cdg_x', data=uv_str.cdg_x)
             hf.create_dataset('cdg_y', data=uv_str.cdg_y)
             hf.create_dataset('cdg_z', data=uv_str.cdg_z)
+            # Event type of each structure (n_str,)
             hf.create_dataset('event', data=uv_str.event)
+
             hf.close()
         
     def read_uvstruc(self,ii,fileQ='../../results/P125_21pi_vu_Q/P125_21pi_vu',padpix=0):
@@ -1048,8 +1127,7 @@ class get_data_norm():
             sumperc += lenfilter/lenstruc
         totfields = len(range_step)
         print('Percentage filtered: '+str(sumperc/totfields))
-        
-                    
+                   
     def eval_dz(self,start,end,delta,volmin=2.7e4,\
                     fileQ='../../results/P125_21pi_vu_Q/P125_21pi_vu'):
         deltaz_sum = 0
