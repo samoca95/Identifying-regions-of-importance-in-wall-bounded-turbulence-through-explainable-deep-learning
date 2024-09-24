@@ -22,6 +22,10 @@ class get_data_norm():
         """ 
         Initialize the normalization
         """
+
+        # rey : friction reynolds number (nondimensional) = Re_tau/y
+        # vtau : 
+                     
         self.file = file_read
         self.rey  = rey
         self.vtau = vtau
@@ -33,25 +37,48 @@ class get_data_norm():
         
     def geom_param(self,start,delta_y,delta_z,delta_x,size_x=2*np.pi,\
                    size_z=np.pi):
+
+        # Desired resolution (1 point every delta_y points)
         self.delta_y = delta_y
         self.delta_x = delta_x
         self.delta_z = delta_z
+
+        # Open the first data file just to see the dimensions
         file_ii = self.file+'.'+str(start)+'.h5.uvw'
-        file = h5py.File(file_ii,'r+')        
+        file = h5py.File(file_ii,'r+')    
+                       
+        # Number of points per dimension given the desired resolution
+        # mx = 192, my = 201, mz = 96
         self.my  = int((np.array(file['my'])[0]+delta_y-1)/delta_y)
         self.mx  = int((np.array(file['mx'])[0]+delta_x-1)/delta_x)
         self.mz  = int((np.array(file['mz'])[0]+delta_z-1)/delta_z)
+
+        # Y coordinate non-dimensionalized with h (considering resolution)
+        # y_h = [-1,+1] -> y = [-h,+h]
+        # It contains the pocition of the centerpoint of each element
         self.y_h = np.array(file['y'])[::delta_y]
+
+        # Create a vector that will store the size of each cell given \
+        # by the center points provided in y_h
         self.dy = np.zeros((self.my,))
+
+        # Divide the channel in up and down symmetries
         if np.mod(self.my,2) == 0:
             self.yd_s = int(self.my*0.5)
             self.yu_s = int(self.my*0.5)
         else:
             self.yd_s = int(self.my*0.5)+1
             self.yu_s = int(self.my*0.5)
+
+        # Calculate the dimensionless wall distances for the bottom half of the channel
+        # y+ = y * u_tau / nu = y * Re_tau
         self.yplus = (1+self.y_h[:self.yd_s])*self.rey
         self.xplus = np.linspace(0,size_x,self.mx)*self.rey
         self.zplus = np.linspace(0,size_z,self.mz)*self.rey
+
+        # Obtain the size of each element given by the distance to the other center points
+        # points:  (wall)|o  |  o  |  o  |  o  |  o|(wall)
+        #     ii:         0     1     2     3     4
         for ii in np.arange(self.my):
             if ii==0:
                 self.dy[ii] = (self.y_h[1]-self.y_h[0])/2
@@ -59,14 +86,21 @@ class get_data_norm():
                 self.dy[ii] = (self.y_h[self.my-1]-self.y_h[self.my-2])/2
             else:
                 self.dy[ii] = (self.y_h[ii+1]-self.y_h[ii-1])/2  
+        
+        # The elements in the x and z dimensions have uniform size               
         self.dx = size_x/self.mx
         self.dz = size_z/self.mz
+        
+        # Calculate the volume of the elements
+        # First in a line (dx and dz are cts but dy is a vector)
+        # As variables are non-dimensional, we need to scale them
         vol_vec = self.dy*self.dx*self.dz*self.rey**3
+        # Volume transformed into a (ny, nz, nx) array
         self.vol = np.zeros((1,self.mz,self.mx),dtype=vol_vec.dtype)+\
         vol_vec.reshape(-1,1,1)
+        # Total volume of the channel
+        # Because y is nondimensional between -1 and 1, then Ly = 2 (see constant)
         self.voltot = size_x*size_z*2*self.rey**3
-        
-
         
     def calc_Umean(self,start,end):
         """
