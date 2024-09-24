@@ -1164,8 +1164,13 @@ class uvstruc():
         """ 
         initialization of the class
         """
+
+        # mat_struc is the structure calculated with:
+        # mat_struc = np.heaviside(uv-Hperc*uvi.reshape(-1,1,1),0)
         if len(mat_struc)>0:
             self.mat_struc = mat_struc
+
+        # Create the results folder to store the parameters
         try:
             os.mkdir('../../results/P125_21pi_vu_Q/')
         except:
@@ -1220,8 +1225,7 @@ class uvstruc():
         self.mat_struc = mat_struc
         self.mat_event = mat_event
         self.mat_segment = mat_segment
-        
-                        
+                          
     def get_cluster_3D6P(self,uu=[],vv=[],flagdiv=0):
         """
         Generate a sparse matrix to find the wall structures
@@ -1230,42 +1234,59 @@ class uvstruc():
         vv : veloicty in v
         flagdiv : divide the structures if the velocity changes sign
         """
+
         # Convert the structure matrix to int type, get its shape and copy
         wklocal  = self.mat_struc.astype('int')
         ny,nz,nx = wklocal.shape
         wk       = wklocal.copy()
+
         # Create a matrix to evaluate the connectivity-1 in all the directions
+        # dirs = -1  0  0
+        #         0 -1  0
+        #         0  0 -1
+        #         1  0  0
+        #         0  1  0
+        #         0  0  1
         dirs = np.array([[-1,0,0],[0,-1,0],[0,0,-1],[1,0,0],[0,1,0],[0,0,1]])
-        # Create vectors with the index in the directions x,z,y note that the
-        # directions with the symmetry: x,z add a vector with the index of the
-        # nodes, the direction y adds a -1 to indicate the presence of the wall
+
+        # Create vectors with the index in the directions x,z,y 
+        # note that the directions with the symmetry (x,z) add a vector 
+        # with the index of the nodes, 
+        # the direction y adds a -1 to indicate the presence of the wall
         indx = np.concatenate((np.arange(nx),np.arange(nx),np.arange(nx)))
         indz = np.concatenate((np.arange(nz),np.arange(nz),np.arange(nz)))
         indy = np.concatenate((np.array([-1]),np.arange(ny),np.array([-1]))) 
+
         # Create a vector infinitely large to store the nodes inside each 
         # structure
         pdim = 10**6      
         cola = np.zeros((3,5*pdim),dtype='int')
         nodes = np.zeros((3,pdim))
         self.nodes = []
+        
         # Create a matrix of x,y,z for containing the index of the nodes in the
         # structures
         vrt = np.zeros((3,1),dtype='int')
+
         # Check the elements of the matrix
         for kk  in np.arange(0,ny):
             for jj  in np.arange(nz):
                 for ii  in np.arange(nx):
+
                     # Skip the points where there is not a structure
                     if wk[kk,jj,ii] == 0:
                         continue
+
                     # The first element of cola is composed by the nodes of
                     # the element of the matrix used for calculating the 
                     # connectivity
                     cola[:,0] = np.array([kk,jj,ii],dtype='int')
+
                     # Initialization of the index
                     nnp = 0
                     nnq = 0
                     ssq = 0
+
                     while nnq <= ssq:
                         # initial point is taken from cola array, index nnq
                         # then the result is stored in nodes, index nnp
@@ -1276,15 +1297,18 @@ class uvstruc():
                             vrtini_v = np.sign(vv[cola[0,nnq],cola[1,nnq],\
                                                   cola[2,nnq]])
                         nodes[:,nnp] = vrtini
+
                         # the index nnp is advanced and the studied element is
                         # removed from the matrix wk
                         nnp = nnp+1
                         wk[vrtini[0],vrtini[1],vrtini[2]] = 0
+
                         # All the directions in the matrix dirs are checked
                         for ld in np.arange(6):
                             vrt[0] = indy[1+dirs[ld,0]+vrtini[0]]
                             vrt[1] = indz[nz+dirs[ld,1]+vrtini[1]]
                             vrt[2] = indx[nx+dirs[ld,2]+vrtini[2]]
+
                             # calculate if the checked point is not a wall, 
                             # there is a structure or there was a point removed 
                             # before from the structure
@@ -1304,7 +1328,9 @@ class uvstruc():
                                 vrt[0] = indy[1+dirs[ld,0]+vrt[0]]
                                 vrt[1] = indz[nz+dirs[ld,1]+vrt[1]]
                                 vrt[2] = indx[nx+dirs[ld,2]+vrt[2]]
+                        
                         nnq += 1
+
                     # Define the nodes contained in the structure    
                     self.nodes.append(nodes[:,:nnp].copy()) 
                     
@@ -1329,9 +1355,14 @@ class uvstruc():
         self.cdg_xbox = np.zeros((len(self.nodes),))
         self.cdg_zbox = np.zeros((len(self.nodes),))
         self.cdg_ybox = np.zeros((len(self.nodes),))
+
         # Calculate for every structure
         for nn  in np.arange(len(self.nodes)):
             vpoints = self.nodes[nn].astype('int')
+
+            # Calculate the center of the structure as if it was a box
+            # That is, only considering average value of coordinates and
+            # not considering the volume of each individual cell
             ymin = y_h[int(np.min(vpoints[0,:]))]
             ymax = y_h[int(np.max(vpoints[0,:]))]
             dy   = np.abs(ymax-ymin)
@@ -1340,6 +1371,8 @@ class uvstruc():
             self.cdg_xbox[nn] = np.floor(np.mean(x_sort))
             self.cdg_zbox[nn] = np.floor(np.mean(z_sort))
             self.cdg_ybox[nn] = np.floor(np.mean(vpoints[0,:])) 
+
+            # Calculate the center of gravity considering the volume of each cell
             for nn2 in np.arange(len(self.nodes[nn][0,:])):
                 self.cdg_x[nn] += hx*vpoints[2,nn2]*vol[vpoints[0,nn2],\
                            vpoints[1,nn2],vpoints[2,nn2]]
@@ -1351,13 +1384,18 @@ class uvstruc():
             self.cdg_x[nn] /= self.vol[nn]
             self.cdg_z[nn] /= self.vol[nn]
             self.cdg_y[nn] /= self.vol[nn]
+
+            # Streamwise and transversal dimensions of the structure
             dx = hx*(np.max(x_sort)-np.min(x_sort))
             dz = hz*(np.max(z_sort)-np.min(z_sort)) 
+
             # Check if the structure is crossing the symmetry planes x and z
+            # Recalculate the cdg ignoring the section crossing the symmetry
             flag_x = np.count_nonzero(x_sort==mx-1)>= 1 and\
             np.count_nonzero(x_sort==0)>=1
             flag_z = np.count_nonzero(z_sort==mz-1)>= 1 and\
             np.count_nonzero(z_sort==0)>=1    
+
             # If the structure is crossing the x plane
             if flag_x:
                 # take the unique indexex of the x position and mark those that
@@ -1365,6 +1403,7 @@ class uvstruc():
                 x_uni = np.unique(x_sort)
                 aux = x_uni == np.arange(len(x_uni))
                 imin = np.where(aux==0)[0]  
+
                 # If the structure is crossing the symmetry plane and divided
                 if not len(imin) == 0:
                     # calculate the minimum and maximum indexes in the 
@@ -1389,6 +1428,7 @@ class uvstruc():
                     self.cdg_x[nn] /= self.vol[nn]
                     if self.cdg_x[nn] > hx*mx:
                         self.cdg_x[nn] -= hx*mx
+
             # If the structure is crossing the z plane
             if flag_z:
                 # take the unique indexex of the x position and mark those that
@@ -1420,47 +1460,64 @@ class uvstruc():
                     self.cdg_z[nn] /= self.vol[nn]
                     if self.cdg_z[nn] > hz*mz:
                         self.cdg_z[nn] -= hz*mz
+            
+            # Store dimensions of the structure
             self.dx[nn] = dx
             self.dz[nn] = dz
             self.ymin[nn] = ymin
             self.ymax[nn] = ymax
+
+            # Volume of the box
             self.boxvol[nn] = dy*dx*dz
-                    
-                    
+                         
     def geo_char(self,du,dv,vol,mx,my,mz):
         """
         Function for calculating the geometrical characteristics of the uv 
         structures
         """
-        # define the type of event matrix and the volume of each event
+        # Define the type of event matrix and the volume of each event
         self.mat_event = np.zeros((my,mz,mx))
         self.event = np.zeros((len(self.nodes),))
+
         # Evaluate the characteristics for each structure
         for nn  in np.arange(len(self.nodes)):
+            # Points of the structure
             vpoints = self.nodes[nn].astype('int')
             voltot = np.zeros((4,))
+
             # Evaluate each node of the structure
             for nn_node in np.arange(len(vpoints[0,:])):
-                # get the u and v velocities for each point of the structure
+                # Get the u and v velocities for each point of the structure
                 duval = du[vpoints[0,nn_node],vpoints[1,nn_node],\
                         vpoints[2,nn_node]]
+                # Invert the vertical velocity of the upper wall to be relative to it
                 if self.cdg_y[nn] <= 0:
                     dvval = dv[vpoints[0,nn_node],\
                                vpoints[1,nn_node],vpoints[2,nn_node]]
                 else:
                     dvval = -dv[vpoints[0,nn_node],\
                                 vpoints[1,nn_node],vpoints[2,nn_node]]
+                
+                # Evaluate the velocity magnitude scaled with the node volume
                 vol_nod = np.sqrt(duval**2+dvval**2)*\
                 vol[vpoints[0,nn_node],vpoints[1,nn_node],\
                     vpoints[2,nn_node]]
+
+                # Keep a counter for which kind of event is the node
+                # Outward interactions
                 if duval > 0 and dvval > 0:
                     voltot[0] += vol_nod
+                # Ejections
                 elif duval < 0 and dvval > 0:
                     voltot[1] += vol_nod
+                # Inward interactions
                 elif duval < 0 and dvval < 0:
                     voltot[2] += vol_nod
+                # Sweeps
                 elif duval > 0 and dvval < 0:
                     voltot[3] += vol_nod
+            
+            # The structures event will be the one dominant along its nodes
             max_event = np.argmax(voltot)
             if max_event == 0:
                 self.event[nn] = 1
@@ -1470,20 +1527,25 @@ class uvstruc():
                 self.event[nn] = 3
             elif max_event == 3:
                 self.event[nn] = 4
+            
+            # Label the nodes with the type of event associated with its structure
             for nn_node in np.arange(len(vpoints[0,:])):
                 self.mat_event[vpoints[0,nn_node],vpoints[1,nn_node],\
                                vpoints[2,nn_node]] = self.event[nn]
-
-                
-                
+        
     def segmentation(self,mx,my,mz):
         """
         Function to segment the model
         """
+        # The points not being part of any structure will be zeros
         self.mat_segment = np.zeros((my,mz,mx))
+        # Do it for each structure
         for nn  in np.arange(len(self.nodes)):
+            # Extract points of the structure
             vpoints = self.nodes[nn].astype('int')
+            # Label each point from the structure
             for nn_node in np.arange(len(vpoints[0,:])):
+                # Assign the structure number to the point
                 self.mat_segment[vpoints[0,nn_node],vpoints[1,nn_node],\
                                vpoints[2,nn_node]] = nn+1
                 
