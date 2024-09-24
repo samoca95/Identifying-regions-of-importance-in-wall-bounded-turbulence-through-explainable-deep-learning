@@ -40,7 +40,6 @@ def plottrain(file="../../results/Simulation_3d/hist.txt"):
     plt.savefig('../../results/Simulation_3d/Loss_plot.png')
     plt.show()
 
-
 def block(xx,nfil,stride,activ,kernel):
     """
     Function for configuring the CNN block
@@ -60,7 +59,6 @@ def block(xx,nfil,stride,activ,kernel):
     xx = Activation(activ)(xx)
     return xx
 
-
 def lastblock(xx,nfil,stride,kernel):
     """
     Function for configuring the last CNN block of a residual loop
@@ -78,8 +76,6 @@ def lastblock(xx,nfil,stride,kernel):
                 strides=(stride,stride,stride),padding="same")(xx)
     xx = BatchNormalization()(xx) 
     return xx
-
-
 
 def invblock(xx,nfil,stride,activ,kernel,outpad=(1,1,1)):
     """
@@ -100,7 +96,6 @@ def invblock(xx,nfil,stride,activ,kernel,outpad=(1,1,1)):
     xx = Activation(activ)(xx)
     return xx
 
-
 def residual_block(xx,nfil,stride,activ,kernel):
     """
     Function for configuring the CNN block
@@ -119,7 +114,6 @@ def residual_block(xx,nfil,stride,activ,kernel):
     out = Add()([xx, fx])
     out = Activation(activ)(out)
     return out
-
 
 class convolutional_residual():
     """
@@ -141,7 +135,6 @@ class convolutional_residual():
         """
         dev_list = str(np.arange(ngpu).tolist())
         self.cudadevice = dev_list.replace('[','').replace(']','')
-    
     
     def model_base(self,shp,nfil,stride,activ,kernel,padpix):
         """
@@ -191,7 +184,7 @@ class convolutional_residual():
         xx22b = block(xx21b,nfil[1],stride[1],activ[1],kernel[1])
         xx23b = block(xx22b,nfil[1],stride[1],activ[1],kernel[1])
         xx24b = block(xx23b,nfil[1],stride[1],activ[1],kernel[1])
-#        # go to first layer
+        # go to first layer
         xx10b = invblock(xx24b,nfil[0],3,activ[0],kernel[0],outpad=(0,0,0)) 
         xx11b = Concatenate()([xx10b,xx14])
         # First layer
@@ -203,7 +196,6 @@ class convolutional_residual():
         xx16b = xx15b[:,:,padpix:-padpix,padpix:-padpix,:]
         self.outputs = xx16b
         
-    
     def define_model(self,shp=(201,96,192,3),nfil=np.array([32,64,96]),\
                      stride=np.array([1,1,1]),\
                      activ=["relu","relu","relu"],\
@@ -228,7 +220,7 @@ class convolutional_residual():
         physical_devices = tf.config.list_physical_devices('GPU')
         available_gpus   = len(physical_devices)
         print('Using TensorFlow version: ', tf.__version__, ', GPU:',available_gpus)
-#        print('Using Keras version: ', tf.keras.__version__)
+        # print('Using Keras version: ', tf.keras.__version__)
         if physical_devices:
             try:
                 for gpu in physical_devices:
@@ -349,7 +341,7 @@ class convolutional_residual():
         physical_devices = tf.config.list_physical_devices('GPU')
         available_gpus   = len(physical_devices)
         print('Using TensorFlow version: ', tf.__version__, ', GPU:',available_gpus)
-#        print('Using Keras version: ', tf.keras.__version__)
+        # print('Using Keras version: ', tf.keras.__version__)
         if physical_devices:
             try:
                 for gpu in physical_devices:
@@ -415,7 +407,6 @@ class convolutional_residual():
         nn_cum += np.ones((self.my,))*self.mx*self.mz
         return uu2_cum,vv2_cum,ww2_cum,uv_cum,vw_cum,uw_cum,nn_cum
     
-    
     def pred_rms(self,start,end,step=1,down_y=1,down_z=1,down_x=1,padpix=15):
         """
         Function for calculating the rms of the velocity components and the 
@@ -441,9 +432,7 @@ class convolutional_residual():
         self.uv    = np.divide(uv_cum,nn_cum)
         self.vw    = np.divide(vw_cum,nn_cum)
         self.uw    = np.divide(uw_cum,nn_cum)
-            
-        
-            
+                  
     def saverms(self,file="../../results/Simulation_3d/Urmspred.txt"):
         """
         Function for saving the value of the rms velocity
@@ -1125,7 +1114,7 @@ class convolutional_residual():
             cb1.set_label(label=r'$ \left(u_p^+-u_s^+ \right)/ max(u_s^+)$',fontsize=fs)
             cb1.ax.tick_params(axis="both",labelsize=fs)     
             try:
-#                from os import mkdir
+                # from os import mkdir
                 os.mkdir('../../results/Simulation_3d/y+='+ystr)
             except:
                 pass
@@ -1192,7 +1181,7 @@ class convolutional_residual():
             cb1.set_label(label=r'$ \left(v_p^+-v_s^+ \right)/ max(v_s^+)$',fontsize=fs)
             cb1.ax.tick_params(axis="both",labelsize=fs)     
             try:
-#                from os import mkdir
+                # from os import mkdir
                 os.mkdir('../../results/Simulation_3d/y+='+ystr)
             except:
                 pass
@@ -1259,7 +1248,7 @@ class convolutional_residual():
             cb1.set_label(label=r'$ \left(w_p^+-w_s^+ \right)/ max(w_s^+)$',fontsize=fs)
             cb1.ax.tick_params(axis="both",labelsize=fs)     
             try:
-#                from os import mkdir
+                # from os import mkdir
                 os.mkdir('../../results/Simulation_3d/y+='+ystr)
             except:
                 pass
@@ -1326,7 +1315,7 @@ class convolutional_residual():
             cb1.set_label(label=r'$ \left(uv_p^+-uv_s^+ \right)/ max(uv_s^+)$',fontsize=fs)
             cb1.ax.tick_params(axis="both",labelsize=fs)     
             try:
-#                from os import mkdir
+                # from os import mkdir
                 os.mkdir('../../results/Simulation_3d/y+='+ystr)
             except:
                 pass
@@ -1393,7 +1382,7 @@ class convolutional_residual():
             cb1.set_label(label=r'$ \left(vw_p^+-vw_s^+ \right)/ max(vw_s^+)$',fontsize=fs)
             cb1.ax.tick_params(axis="both",labelsize=fs)     
             try:
-#                from os import mkdir
+                # from os import mkdir
                 os.mkdir('../../results/Simulation_3d/y+='+ystr)
             except:
                 pass
@@ -1460,12 +1449,11 @@ class convolutional_residual():
             cb1.set_label(label=r'$ \left(uw_p^+-uw_s^+ \right)/ max(uw^+)$',fontsize=fs)
             cb1.ax.tick_params(axis="both",labelsize=fs)     
             try:
-#                from os import mkdir
+                # from os import mkdir
                 os.mkdir('../../results/Simulation_3d/y+='+ystr)
             except:
                 pass
             plt.savefig('../../results/Simulation_3d/y+='+ystr+'/uw_'+str(ii))
-        
         
     def mre_pred(self,data,start,end,step=1,down_y=1,down_z=1,down_x=1,\
                  padpix=15,delta_t=1):
@@ -1522,10 +1510,7 @@ class convolutional_residual():
         print("Error u: " + str(self.mre_uu))
         print("Error v: " + str(self.mre_vv))
         print("Error w: " + str(self.mre_ww))
-        
-
-    
-            
+          
     def savemre(self,file="../../results/Simulation_3d/mre_predic.txt"):
         """
         Function for saving the value of the rms velocity
