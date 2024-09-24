@@ -106,29 +106,40 @@ class get_data_norm():
         """
         Function to calculate the mean velocity
         """       
+        # Go solution by solution calculating its local mean
         for ii in range(start,end):            
+
+            # Open local file
             file_ii = self.file+'.'+str(ii)+'.h5.uvw'
             print('Mean velocity calculation:' + str(file_ii))
             file = h5py.File(file_ii,'r+')
+
+            # Read the velocity arrays [ny, nz, nx] with the desired resolution
             UU = np.array(file['u'])[::self.delta_y,\
                          ::self.delta_z,::self.delta_x]
             VV = np.array(file['v'])[::self.delta_y,\
                          ::self.delta_z,::self.delta_x]
             WW = np.array(file['w'])[::self.delta_y,\
                          ::self.delta_z,::self.delta_x]
+            
+            # The mean is calculated for the horizontal planes
             if ii == start:
-                UU_cum = np.sum(UU,axis=(1,2))
-                VV_cum = np.sum(VV,axis=(1,2))
-                WW_cum = np.sum(WW,axis=(1,2))
-                nn_cum = np.ones((self.my,))*self.mx*self.mz
+                UU_cum = np.sum(UU,axis=(1,2))  # (ny,)
+                VV_cum = np.sum(VV,axis=(1,2))  # (ny,)
+                WW_cum = np.sum(WW,axis=(1,2))  # (ny,)
+                # How many points where used for each horizontal plane
+                nn_cum = np.ones((self.my,))*self.mx*self.mz  # (ny,)
+            # Add the rest of solutions to the sum and counter
             else:
                 UU_cum += np.sum(UU,axis=(1,2))
                 VV_cum += np.sum(VV,axis=(1,2))
                 WW_cum += np.sum(WW,axis=(1,2))
                 nn_cum += np.ones((self.my,))*self.mx*self.mz
-        self.UUmean = np.divide(UU_cum,nn_cum)
-        self.VVmean = np.divide(VV_cum,nn_cum)
-        self.WWmean = np.divide(WW_cum,nn_cum)
+        
+        # Obtain the mean of each horizontal plane as sum/count
+        self.UUmean = np.divide(UU_cum,nn_cum)  # (ny,)
+        self.VVmean = np.divide(VV_cum,nn_cum)  # (ny,)
+        self.WWmean = np.divide(WW_cum,nn_cum)  # (ny,)
         
     def plot_Umean(self,reference='../../data/Simulation_3d/Re180.prof.txt'):
         """
