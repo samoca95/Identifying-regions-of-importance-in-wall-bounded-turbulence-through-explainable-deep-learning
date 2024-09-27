@@ -53,6 +53,7 @@ def block(xx,nfil,stride,activ,kernel):
     """
     from tensorflow.keras.layers import Conv3D, BatchNormalization,\
         Activation
+    # padding = not to affect the input size
     xx = Conv3D(nfil, kernel_size=kernel, 
                 strides=(stride,stride,stride),padding="same")(xx)
     xx = BatchNormalization()(xx) 
@@ -138,8 +139,7 @@ class convolutional_residual():
     
     def model_base(self,shp,nfil,stride,activ,kernel,padpix):
         """
-        Base structure of the model, with residual blocks
-        attached.
+        Base structure of the model, with residual blocks attached.
             shp     : input shape
             nfil    : number of filters, each item is the value of a layer
             stride  : value of the stride in the 3 dimensions of each layer
@@ -149,15 +149,32 @@ class convolutional_residual():
             inputs  : input data of the model
             outputs : output data of the model
         """
+
         from tensorflow.keras.layers import Input,MaxPool3D,\
         Concatenate,Add,Activation
         from tensorflow.image import crop_to_bounding_box
-        dim0 = shp[0]
-        dim1 = shp[1]+2*padpix
-        dim2 = shp[2]+2*padpix
-        dim3 = shp[3]
-        shp = (dim0,dim1,dim2,dim3)
+
+        # Extract the dimensions of the original input and include x and z 
+        # padding if specified
+        dim0 = shp[0]            # Y-coord
+        dim1 = shp[1]+2*padpix   # Z-coord
+        dim2 = shp[2]+2*padpix   # X-coord
+        dim3 = shp[3]            # Channels (e.g., nv)
+        shp = (dim0,dim1,dim2,dim3)  # (ny,nz,nx,nv)
+
+        # Define de input layer with the defined dimensions
         self.inputs = Input(shape=shp)
+
+        # Each block is composed by:
+        # 1. Conv3D(nfil, kernel_size, stride, padding="same")
+        # 2. BatchNormalization
+        # 3. Activation
+
+        # The invblock uses:
+        # 1. Conv3DTranspose(nfil, kernel_size, stride, padding="valid",output_padding=outpad)
+        # 2. BatchNormalization
+        # 3. Activation
+
         # First layer
         xx11 = block(self.inputs,nfil[0],stride[0],activ[0],kernel[0]) 
         xx12 = block(xx11,nfil[0],stride[0],activ[0],kernel[0]) 
