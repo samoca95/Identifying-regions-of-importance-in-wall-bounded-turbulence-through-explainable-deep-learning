@@ -53,7 +53,6 @@ def block(xx,nfil,stride,activ,kernel):
     """
     from tensorflow.keras.layers import Conv3D, BatchNormalization,\
         Activation
-    # padding = not to affect the input size
     xx = Conv3D(nfil, kernel_size=kernel, 
                 strides=(stride,stride,stride),padding="same")(xx)
     xx = BatchNormalization()(xx) 
@@ -154,17 +153,6 @@ class convolutional_residual():
         Concatenate,Add,Activation
         from tensorflow.image import crop_to_bounding_box
 
-        # Extract the dimensions of the original input and include x and z 
-        # padding if specified
-        dim0 = shp[0]            # Y-coord
-        dim1 = shp[1]+2*padpix   # Z-coord
-        dim2 = shp[2]+2*padpix   # X-coord
-        dim3 = shp[3]            # Channels (e.g., nv)
-        shp = (dim0,dim1,dim2,dim3)  # (ny,nz,nx,nv)
-
-        # Define de input layer with the defined dimensions
-        self.inputs = Input(shape=shp)
-
         # Each block is composed by:
         # 1. Conv3D(nfil, kernel_size, stride, padding="same")
         # 2. BatchNormalization
@@ -173,44 +161,97 @@ class convolutional_residual():
         # The invblock uses:
         # 1. Conv3DTranspose(nfil, kernel_size, stride, padding="valid",output_padding=outpad)
         # 2. BatchNormalization
-        # 3. Activation
+        # 3. Activation           
+
+        # Let's follow the CNN with dimensions understand the parameters:
+
+        # Input layer: ny = 201; nz = 96; nx = 192; nv = 3; padding = 15
+        # xx10 (input) = (201, 96+2*15, 192+2*15, 3) = (201, 126, 222, 3) 
+        dim0 = shp[0]            # Y-coord
+        dim1 = shp[1]+2*padpix   # Z-coord
+        dim2 = shp[2]+2*padpix   # X-coord
+        dim3 = shp[3]            # Channels (e.g., nv)
+        shp = (dim0,dim1,dim2,dim3)  # (ny,nz,nx,nv)
+        self.inputs = Input(shape=shp)
 
         # First layer
-        xx11 = block(self.inputs,nfil[0],stride[0],activ[0],kernel[0]) 
+        # nfil = 32; stride = 1, kernel_size = (3,3,3), activation = "relu" 
+        # As padding in Conv3D = "same" and stride = 1, padding will be 
+        # adjusted automatically to keep the same output dimension (in all conv)
+        # The number of filters changes the number of channels of the output
+        xx11 = block(self.inputs,nfil[0],stride[0],activ[0],kernel[0])
+        # xx11 = (201, 126, 222, n_fil) = (201, 126, 222, 32)
         xx12 = block(xx11,nfil[0],stride[0],activ[0],kernel[0]) 
         xx13 = block(xx12,nfil[0],stride[0],activ[0],kernel[0])
         xx14 = block(xx13,nfil[0],stride[0],activ[0],kernel[0])
-        # to second layer
+        # xx14 = (201, 126, 222, n_fil) = (201, 126, 222, 32)
+
+        # Conversion to second layer with MaxPool
+        # pool_size = (3,3,3); strides = None (=3); padding = None
+        # dim_out = (dim - pool_size + 2*padding) / (strides) + 1
+        # The number of channels is not changing
         xx20 = MaxPool3D(3)(xx14)
-        # second layer
+        # xx20 = ((201-3+0)/3+1, (126-3+0)/3+1, (222-3+0)/3+1, 32) = (67, 42, 74, 32)
+
+        # Second layer (same as first, but n_fil = 64)
         xx21 = block(xx20,nfil[1],stride[1],activ[1],kernel[1])
         xx22 = block(xx21,nfil[1],stride[1],activ[1],kernel[1])
         xx23 = block(xx22,nfil[1],stride[1],activ[1],kernel[1])
         xx24 = block(xx23,nfil[1],stride[1],activ[1],kernel[1])
-        # to third layer
+        # xx24 = (67, 42, 74, 64)
+
+        # Conversion to third layer with MaxPool (same as previous)
         xx30 = MaxPool3D(3)(xx24)
-        # third layer
+        # xx30 = ((67-3+0)/3+1, (42-3+0)/3+1, (74-3+0)/3+1, 64) = (22, 14, 24 64)
+
+        # Third layer (same as first, but n_fil = 96)
         xx31 = block(xx30,nfil[2],stride[2],activ[2],kernel[2])
         xx32 = block(xx31,nfil[2],stride[2],activ[2],kernel[2])
         xx33 = block(xx32,nfil[2],stride[2],activ[2],kernel[2])
         xx34 = block(xx33,nfil[2],stride[2],activ[2],kernel[2])
-        # go to second layer
+        ## xx34 = (22, 14, 24, 96)
+
+        # Back to second level
+        # nfil = 64; stride = 3; activation = "relu"; kernel_size = (3,3,3); outpad = (1,0,2)
+        # Because padding="valid" in the Conv3DTranspose, the dimensions can change
+        # dim_out = (dim - 1) * strides + kernel_size + output_padding
+        # The number of filters changes the number of channels of the output
         xx20b = invblock(xx34,nfil[1],3,activ[1],kernel[1],outpad=(1,0,2))
+        # xx20b = ((22-1)*3+3+1, (14-1)*3+3+0, (24-1)*3+3+2, n_fil) = (67, 42, 74, 64)
+        # xx24 = (67, 42, 74, 64)
         xx21b = Concatenate()([xx24,xx20b])   
-        # second layer
+        # xx21b = (67, 42, 74, 128)
+
+        # Continue second layer
         xx22b = block(xx21b,nfil[1],stride[1],activ[1],kernel[1])
         xx23b = block(xx22b,nfil[1],stride[1],activ[1],kernel[1])
         xx24b = block(xx23b,nfil[1],stride[1],activ[1],kernel[1])
-        # go to first layer
+        # xx24b = (67, 42, 74, 64)
+
+        # Back to first level
+        # nfil = 32; stride = 3; activation = "relu"; kernel_size = (3,3,3); outpad = (1,0,2)
+        # dim_out = (dim - 1) * strides + kernel_size + output_padding
         xx10b = invblock(xx24b,nfil[0],3,activ[0],kernel[0],outpad=(0,0,0)) 
+        # xx10b = ((67-1)*3+3+0, (42-1)*3+3+0, (74-1)*3+3+0, n_fil) = (201, 126, 222, 32)
+        # xx14 = (201, 126, 222, 32)
         xx11b = Concatenate()([xx10b,xx14])
-        # First layer
+        # xx11b = (201, 126, 222, 64)
+
+        # Continue first layer
         xx12b = block(xx11b,nfil[0],stride[0],activ[0],kernel[0])
         xx13b = block(xx12b,nfil[0],stride[0],activ[0],kernel[0])
         xx14b = block(xx13b,nfil[0],stride[0],activ[0],kernel[0])
+        # xx14b = (201, 126, 222, 32)
+
+        # Use 3 kernels in the last conv to come back to nv channels
         xx15b = block(xx14b,3,stride[0],activ[0],kernel[0])
-        #
+        # xx15b = (201, 126, 222, 3)
+
+        # Remove original padding from the x and z directions
         xx16b = xx15b[:,:,padpix:-padpix,padpix:-padpix,:]
+        # xx16b = (201, 126-2*15, 222-2*15, 3) = (201, 96, 192, 3)
+
+        # Save result as output
         self.outputs = xx16b
         
     def define_model(self,shp=(201,96,192,3),nfil=np.array([32,64,96]),\
