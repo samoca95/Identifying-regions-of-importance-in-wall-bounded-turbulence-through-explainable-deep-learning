@@ -273,6 +273,8 @@ class convolutional_residual():
         import tensorflow as tf
         from tensorflow.keras import Model
         from tensorflow.keras.optimizers import RMSprop
+
+        # Use GPU if available
         os.environ["CUDA_VISIBLE_DEVICES"]= self.cudadevice
         print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
         physical_devices = tf.config.list_physical_devices('GPU')
@@ -290,13 +292,27 @@ class convolutional_residual():
         print("GPUs in use:")
         for gpu in tf.config.list_logical_devices('GPU'):
             print(gpu.name)
+
+        # Define and compile the model    
         with strategy.scope(): 
+
+            # Define the path from inputs to outputs
             self.model_base(shp,nfil,stride,activ,kernel,padpix)
+
+            # RMS optimizer
             optimizer = RMSprop(learning_rate=learat,momentum=optmom) 
+
+            # Assign the path to a tf model
             self.model = Model(self.inputs, self.outputs)
+
+            # Configure the model with the desired loss and optimizer
             self.model.compile(loss=tf.keras.losses.MeanSquaredError(),\
                                optimizer=optimizer)
+        
+        # Print a summary of the model layers
         self.model.summary()    
+
+        # Experimental stuff (what does it?)
         self.options = tf.data.Options()
         self.options.experimental_distribute.auto_shard_policy = \
         tf.data.experimental.AutoShardPolicy.FILE
