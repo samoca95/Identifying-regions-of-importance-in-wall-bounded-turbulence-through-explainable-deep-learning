@@ -338,13 +338,16 @@ class convolutional_residual():
         """        
         import get_data_fun as gd
         import pandas as pd
+
         # Create a vector with the random index of the training fields
         ind_vec = np.array(range(start,end-delta_pred))
         np.random.shuffle(ind_vec)
+
         # Divide the previous vector in smaller packages using the delta_t
-        ii_ini = 0
-        ii_fin = ii_ini+delta_t
-        # Initialize and normalize the data
+        ii_ini = 0 # Will mark the start of the package, here is the 1st one
+        ii_fin = ii_ini+delta_t # Will mark the end of the package, here 1st one
+
+        # Initialize and normalize the database
         data = gd.get_data_norm(self.fileddbb,pond=self.pond)
         data.geom_param(start,down_y,down_z,down_x)
         try:
@@ -352,26 +355,40 @@ class convolutional_residual():
         except:
             data.calc_norm(start,end)
             data.save_norm()
+        
+        # Start the training
         epochcum = 0
+        # Keep training until all the batches have been used
         while ii_ini < end-start:
+            # Adjust ii_fin if we are in last batch and its partial
             if ii_fin < end-start:
                 interval = ind_vec[ii_ini:ii_fin]
             else:
                 interval = ind_vec[ii_ini:]
+            
+            # Split the interval data into training and validation sets for training
             train_data,val_data = data.trainvali_data(interval,\
                                                       delta_pred=delta_pred,\
                                                       padpix=padpix)
+            
+            # Further split the training and validation into batches
             train_data = train_data.batch(batch_size)
             val_data = val_data.batch(batch_size) 
             train_data = train_data.with_options(self.options)
             val_data = val_data.with_options(self.options)
+
+            # Training with the current interval dataset
             epoch = 0
             while epoch < max_epoch: 
                 print('Training... '+str(ii_ini/(end-start)*100)+'%')
+
+                # Fit the model, perform only delta_e steps
                 data_training = self.model.fit(train_data,\
                                                batch_size=batch_size,\
                                                verbose=2,epochs=delta_e,\
                                                validation_data=val_data)  
+                
+                # Write training history for later reference and visualization
                 hmat = np.zeros((delta_e,3))
                 if ii_ini == 0 and epoch == 0:
                     hmat[:,0] = np.arange(delta_e)
@@ -390,9 +407,15 @@ class convolutional_residual():
                         for line in hmat:
                             filehist.write(str(line[0])+','+str(line[1])+','+\
                                            str(line[2])+'\n')                
+                
+                # Save the model
                 self.model.save(trainfile)
+
+                # Update the counters of training steps
                 epoch += delta_e
                 epochcum += delta_e
+            
+            # Proceed to next interval in the time series and keep training
             ii_ini = ii_fin
             ii_fin = ii_ini+delta_t
                         

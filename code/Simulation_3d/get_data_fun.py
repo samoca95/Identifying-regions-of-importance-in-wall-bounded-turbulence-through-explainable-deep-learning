@@ -670,9 +670,18 @@ class get_data_norm():
         
         from sklearn.model_selection import train_test_split        
         import tensorflow as tf
+
+        # Create empty arrays for the input and reference output of the Unet
+        # The input will have the desired padding, while the output will be 
+        # compared with the solution withouy padding
         vel_data_in = np.zeros((len(index),self.my,self.mz+2*padpix,\
                                 self.mx+2*padpix,3))
         vel_data_out = np.zeros((len(index),self.my,self.mz,self.mx,3))
+
+        # Make sure the meean and limits of velocity are loaded so that we can
+        # calculate the fluctuations only of the current interval 
+        # (instead of doing it for the whole timeseries) 
+        # Note!: we will normalize this interval with the whole timeseries 
         try:
             self.UUmean 
         except:
@@ -686,26 +695,39 @@ class get_data_norm():
             self.wwmax
         except:
             self.read_norm(file=normfile)
-        for ii in np.arange(len(index)):            
+
+        # Calculate fluctuations for the current interval and normalize them 
+        # with the whole database 
+        for ii in np.arange(len(index)):      
+            # Fluctuations      
             uu_i0,vv_i0,ww_i0 = self.read_velocity(index[ii],padpix=padpix)
+            # Normalization 
+            # uu_ii_norm = (uu_ii - uu_ii_min) / (uu_ii_max - uu_ii_min)
             vel_data_in[ii,:,:,:,:] = self.norm_velocity(uu_i0,vv_i0,ww_i0,\
                        padpix=padpix)
             uu_i1,vv_i1,ww_i1 = self.read_velocity(index[ii]+delta_pred)
             vel_data_out[ii,:,:,:,:] = self.norm_velocity(uu_i1,vv_i1,ww_i1)
+        
+        # Split in training and validation
         data_X = vel_data_in
         data_Y = vel_data_out
         train_X,valid_X,train_Y,valid_Y = \
         train_test_split(data_X, data_Y,test_size=ts,shuffle=False,\
                          random_state=13) 
         del data_X,data_Y
+        
+        # Reshape to the correct size
         train_X = train_X.reshape(-1,self.my,self.mz+2*padpix,self.mx+2*padpix,3)
         valid_X = valid_X.reshape(-1,self.my,self.mz+2*padpix,self.mx+2*padpix,3) 
         train_Y = train_Y.reshape(-1,self.my,self.mz,self.mx,3)
         valid_Y = valid_Y.reshape(-1,self.my,self.mz,self.mx,3)
+        
+        # Create a tf dataset
         train_data = tf.data.Dataset.from_tensor_slices((train_X, train_Y))
         del train_X,train_Y
         val_data = tf.data.Dataset.from_tensor_slices((valid_X, valid_Y))
         del valid_X,valid_Y
+        
         return train_data,val_data
     
     def norm_velocity(self,uu,vv,ww,padpix=0):
