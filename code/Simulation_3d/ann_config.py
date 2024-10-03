@@ -509,6 +509,8 @@ class convolutional_residual():
         Function for calculating the rms of the velocity components and the 
         product of the velocity fluctuations of the predicted fields
         """
+
+        # The rms will be calculated using the whole predicted time series
         for ii in range(start,end,step):
             pfield = self.eval_model(ii,down_y=down_y,down_z=down_z,\
                                      down_x=down_x,start=start,padpix=padpix)

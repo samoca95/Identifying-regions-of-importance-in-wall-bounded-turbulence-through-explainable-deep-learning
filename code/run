@@ -5,11 +5,11 @@ set -ex
 
 # Run the 3d simulations
 cd Simulation_3d/
-python -u main_segment.py "$@"
-python -u main_CNN.py "$@"
-python -u plottrain.py "$@"
-python -u main_evCNN.py "$@"
-python -u main_evCNN_error.py "$@"
+python -u main_segment.py "$@"      # Pre-process the data
+python -u main_CNN.py "$@"          # Define and train the CNN
+python -u plottrain.py "$@"         # Plot the CNN training history
+python -u main_evCNN.py "$@"        # Evaluate the results from the CNN
+python -u main_evCNN_error.py "$@"  # Same that above, but plots the surfaces
 python -u main_shap.py "$@"
 python -u readshap.py "$@"
 
