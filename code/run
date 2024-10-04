@@ -10,8 +10,8 @@ python -u main_CNN.py "$@"          # Define and train the CNN
 python -u plottrain.py "$@"         # Plot the CNN training history
 python -u main_evCNN.py "$@"        # Evaluate the results from the CNN
 python -u main_evCNN_error.py "$@"  # Same that above, but plots the surfaces
-python -u main_shap.py "$@"
-python -u readshap.py "$@"
+python -u main_shap.py "$@"         # Calculate and save the SHAP values
+python -u readshap.py "$@"          # Read and plot the results
 
 # Run the 2d experiments
 cd ../Experiment_2d/
