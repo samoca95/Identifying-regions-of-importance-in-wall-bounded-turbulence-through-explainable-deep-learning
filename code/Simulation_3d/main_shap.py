@@ -11,7 +11,7 @@ import shap_config as sc
 start = 7000
 end = 7001
 step = 1
-shap = sc.shap_conf()
-shap.calc_shap_kernel(start,end,step)
+shap = sc.shap_conf() # Initialize the class (loqds the trained model)
+shap.calc_shap_kernel(start,end,step) # Calculate and save the shap values
                       
 print('End: main_shap.py')

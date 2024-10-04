@@ -16,7 +16,10 @@ class shap_conf():
         Initialization of the SHAP class
         """
         import ann_config as ann
+
         self.background = None
+
+        # Loads the model and stores it for local reference        
         CNN = ann.convolutional_residual()
         CNN.load_ANN(filename=filecnn)
         self.model = CNN.model
@@ -33,7 +36,9 @@ class shap_conf():
                          fileUmean="../../results/Simulation_3d/Umean.txt",filenorm="../../results/Simulation_3d/norm.txt",padpix=15):
         import get_data_fun as gd
         import shap
-#        import os
+        # import os
+
+        # Load the reference velocity and fluctuations (from simulation)
         normdata = gd.get_data_norm(file_read=fileuvw)
         normdata.geom_param(start,1,1,1)
         try:
@@ -44,27 +49,74 @@ class shap_conf():
             normdata.read_norm(file=filenorm)
         except:
             normdata.calc_norm(start,end)
-        self.create_background(normdata)
+
+        # The background will be -uu_min/(uu_max-uu_min) value
+        self.create_background(normdata)  # (3,)
+
+        # Calculate shap values for each timestep
         self.shap_values = []
         for ii in range(start,end,step):
+            # Skip if the shap has already been calculated and saved
             if os.path.exists(file+'.'+str(ii)+'.h5.shap'):
                 print('Existing...')
                 continue
+
+            # Read the Q events from the current time steps given the file
             uv_struc = normdata.read_uvstruc(ii,fileQ=fileQ,padpix=padpix)
+
+            # Remember: .mat_segment stores the structure number associated to 
+            # each point, 0 if there is no structure at that point
+
+            # What is the maximum structure number for this time step?
             uvmax = np.max(uv_struc.mat_segment)
+
+            # We assign 0 to the first structure and put the bulk to the end (why?)
+            # To do so, we substract 1, now the bulk fluid will be assigned -1 value
+            # All the rest will be shifted
             self.segmentation = uv_struc.mat_segment-1
+            # And we move the bulk (now -1), to the last position, so we assign it uvmax
             self.segmentation[self.segmentation==-1] = uvmax
+            # Now .segmentation will have for each node, a value associated with 
+            # the structure it is part of, starting from 0. 
+            # The bulk of the fluid (not a structure) will be at the last position.
+
+            # Read and normalize the fluctuations of velocity of current time step
             uu_i,vv_i,ww_i = normdata.read_velocity(ii,padpix=padpix)
             self.input = normdata.norm_velocity(uu_i,vv_i,ww_i,padpix=padpix)[0,:,:,:,:]
+
+            # Read and normalize the fluctuations of velocity of the next time 
+            # step (will be the reference for the prediction model)
             uu_o,vv_o,ww_o = normdata.read_velocity(ii+1)
             self.output = normdata.norm_velocity(uu_o,vv_o,ww_o)[0,:,:,:,:]
-            nmax2 = len(uv_struc.event)+1
-            zshap = np.ones((1,nmax2))
+
+            nmax2 = len(uv_struc.event)+1 # Number of structures + 1
+            zshap = np.ones((1,nmax2)) # Number of features for the method
+            
+            # Use the Kernel SHAP method to explain the output of any function
+            # https://shap.readthedocs.io/en/latest/generated/shap.KernelExplainer.html
+            
+            # * About the background dataset: during the estimation of the importance 
+            # of each feature for the prediction, that feature will be set to "missing".
+            # One feature is set to missing by replacing it by its background dataset value.
+            # In this case, we are providing a null vector, therefore, each structure will be 
+            # completely shut down during the process described.
+
+            # * About the model: it will provide a vector with the MSE comparing 
+            # the prediction of the model considering that structure vs not considring it.
+            # That will provide a magnitude of how important that structure is 
+            # for the prediction model
+
+            # Initialize the method supplying a model and a background dataset. 
             explainer = shap.KernelExplainer(self.model_function,\
                                              np.zeros((1,nmax2)))
-#            shap_values = explainer.shap_values(zshap,nsamples="auto")[0][0]
+
+            # Estimate the SHAP values for the structures using 500 re-evaluations
+            # when explaining each prediction
+            # shap_values = explainer.shap_values(zshap,nsamples="auto")[0][0]
             shap_values = explainer.shap_values(zshap,nsamples=500)[0][0]
             print(shap_values)
+
+            # Save the shap values to a file
             self.write_output(shap_values,ii,file=file)
             
     def write_output(self,shap,ii,file='../../results/P125_21pi_vu_SHAP/P125_21pi_vu'):
@@ -129,51 +181,73 @@ class shap_conf():
         hf = h5py.File('../../results/Simulation_3d/mse_fg2.h5', 'w')
         hf.create_dataset('../../results/Simulation_3d/mse_fg2', data=self.error_mse2)
         
-        
     def mask_dom(self,zs):
         """
-        Function for making the domain
+        Function for masking the domain
         """
         # If no background is defined the mean value of the field is taken
         if self.background is None:
             self.background = self.input.mean((0,1))*np.ones((3,))
+        
+        # Set the velocity of the nodes associated to the desired structure 
+        # to the background value
         mask_out = self.input.copy()
         # Replace the values of the field in which the feature is deleted
         for jj in range(zs.shape[0]):
             if zs[jj] == 0:
                 mask_out[self.segmentation == jj,:] = self.background
+        
         return mask_out
     
     def shap_model_kernel(self,model_input):
         """
         Model to calculate the shap value
         """
+        # Make a prediction without considering the desired structure
         input_pred = model_input.reshape(1,model_input.shape[0],\
                                          model_input.shape[1],\
                                              model_input.shape[2],\
                                                  model_input.shape[3])
         pred = self.model.predict(input_pred)
+
+        # Compare the prediction with the reference form the DNS simulation
         len_y = self.output.shape[0]
         len_z = self.output.shape[1]
         len_x = self.output.shape[2]
         mse  = np.mean(np.sqrt((self.output.reshape(-1,len_y,len_z,len_x,3)\
                                 -pred)**2))
+        
         return mse
     
     def model_function(self,zs):
+        # Model function for the SHAP method
+        
+        # The shap calculates, for each structure, the mse between the
+        # reference (DNS solution) and of the model the prediction with that 
+        # feature missing
         ii = 0
         lm = zs.shape[0]
-        mse = np.zeros((lm,1))
+        mse = np.zeros((lm,1)) # Will store the resulting mse value
+
         for zii in zs:
             print('Calculating SHAP: '+str(ii/lm))
+
+            # Input for the model where the corresponding structure is masked 
+            # (i.e., set to background)
             model_input = self.mask_dom(zii)
+
+            # Calculate the MSE between the DNS reference and the model 
+            # prediction without the structure
             mse[ii,0] = self.shap_model_kernel(model_input)
+
             ii += 1
+
+        # The result of the model is a vector with the MSE for each structure
         return mse
 
     def create_background(self,data,value=0):
         """
-        Function for generating the bacground value
+        Function for generating the background value
         """
         self.background = np.zeros((3,))
         self.background[0] = (value-data.uumin)/(data.uumax-data.uumin)
@@ -918,10 +992,6 @@ class shap_conf():
             hf.create_dataset('cdg_y_wd', data=self.cdg_y_wd)
             hf.close()
            
-        
-            
-        
-        
     def plot_shaps(self,colormap='viridis'):
         """ 
         Function for plotting the results of the SHAP vs the volume
@@ -992,8 +1062,6 @@ class shap_conf():
                                'Inward\ninteraction','Sweep'],fontsize=fs-4)
         plt.savefig('../../results/Simulation_3d/vol_SHAPvol_'+colormap+'_30+.png')
         
-        
-                
     def plot_shaps_pdf(self,colormap='viridis',bin_num=100,lev_val=2.5,alf=0.5):
         """ 
         Function for plotting the results of the SHAP vs the Reynolds stress
@@ -1141,10 +1209,7 @@ class shap_conf():
         plt.xlim([0,3.5])
         plt.ylim([0,5.5])
         plt.savefig('../../results/Simulation_3d/hist2d_interp_vol_SHAPvol_'+colormap+'_30+.png')
-        
-        
-        
-                  
+                     
     def plot_shaps_pdf_probability(self,colormap='viridis',bin_num=100,lev_val=2.5,alf=0.5):
         """ 
         Function for plotting the results of the SHAP vs the Reynolds stress
@@ -1376,7 +1441,6 @@ class shap_conf():
         plt.tick_params(axis='both', which='major', labelsize=fs)
         plt.savefig('../../results/Simulation_3d/hist2d_interp_vol_SHAPvol_'+colormap+'_30+_Q4.png')
        
-
     def plot_shaps_pdf_perclim2(self,colormap='viridis',bin_num=100,per_val=0.1,alf=0.5):
         """ 
         Function for plotting the results of the SHAP vs the Reynolds stress
@@ -1526,7 +1590,6 @@ class shap_conf():
         plt.xlim([0,3.5])
         plt.ylim([0,5.5])
         plt.savefig('../../results/Simulation_3d/hist2d_interp_vol_SHAPvol_'+colormap+'_30+.png')   
-        
         
     def plot_shaps_pdf_perclim(self,colormap='viridis',bin_num=100,per_val=0.1,per_val_vol=0.1,alf=0.5,log=False):
         """ 
@@ -1739,9 +1802,6 @@ class shap_conf():
         plt.xlim([0,3.5])
         plt.ylim([0,5.5])
         plt.savefig('../../results/Simulation_3d/hist2d_interp_vol_SHAPvol_'+colormap+'_30+.png')
-       
-
-
                 
     def plot_shaps_pdf_wall(self,colormap='viridis',bin_num=100,lev_val=2.5,alf=0.5):
         """ 
@@ -2115,8 +2175,7 @@ class shap_conf():
         plt.xlim([0,3.5])
         plt.ylim([0,5.5])
         plt.savefig('../../results/Simulation_3d/hist2d_interp_vol_SHAPvol_'+colormap+'_30+_walldetach.png')
-       
-                
+            
     def plot_shaps_pdf_wall_perclim2(self,colormap='viridis',bin_num=100,per_val=0.1,alf=0.5):
         """ 
         Function for plotting the results of the SHAP vs the Reynolds stress
@@ -2493,12 +2552,7 @@ class shap_conf():
         plt.xlim([0,3.5])
         plt.ylim([0,5.5])
         plt.savefig('../../results/Simulation_3d/hist2d_interp_vol_SHAPvol_'+colormap+'_30+_walldetach.png')
-       
-
-
-
-
-                
+               
     def plot_shaps_pdf_wall_perclim(self,colormap='viridis',bin_num=100,per_val=0.1,per_val_vol=0.1,alf=0.5,log=True):
         """ 
         Function for plotting the results of the SHAP vs the Reynolds stress
@@ -3008,11 +3062,6 @@ class shap_conf():
         plt.ylim([0,5.5])
         plt.savefig('../../results/Simulation_3d/hist2d_interp_vol_SHAPvol_'+colormap+'_30+_walldetach.png')
        
-
-
-
-        
-        
     def plot_shaps_uv(self,colormap='viridis'):
         """ 
         Function for plotting the results of the SHAP vs the Reynolds stress
@@ -3064,27 +3113,27 @@ class shap_conf():
         y1_2 = 0.8
         ytop = 9
         ytop2 = y1_1
-#        x0 = 0
-#        x0b = 0.4
-#        x1 = 0.25
-#        x2 = 1.4
-#        x3 = 1.7
-#        y0_1 = 2
-#        y1_1 = 4
-#        y0_2 = 0
-#        y1_2 = 2.5
-#        ytop = 6
-#        ytop2 = 4
-#        x0 = 0
-#        x0b = 1
-#        x1 = 0.05
-#        x2 = 1.4
-#        x3 = 1.7
-#        y0_1 = 6
-#        y1_1 = 8
-#        y0_2 = 0
-#        y1_2 = 1.8
-#        ytop = 15
+        # x0 = 0
+        # x0b = 0.4
+        # x1 = 0.25
+        # x2 = 1.4
+        # x3 = 1.7
+        # y0_1 = 2
+        # y1_1 = 4
+        # y0_2 = 0
+        # y1_2 = 2.5
+        # ytop = 6
+        # ytop2 = 4
+        # x0 = 0
+        # x0b = 1
+        # x1 = 0.05
+        # x2 = 1.4
+        # x3 = 1.7
+        # y0_1 = 6
+        # y1_1 = 8
+        # y0_2 = 0
+        # y1_2 = 1.8
+        # ytop = 15
         plt.fill_between([x0,x1,x0b,x2],[y0_1,y1_1,y1_1,y1_1],[y0_2,y0_2,y0_2,y1_2],\
                          color=cmap_fill(0.9),alpha=0.3)
         plt.fill_between([x1,(ytop-y1_1)*(x1-x0)/(y1_1-y0_1)+x1,x2],[y1_1,ytop,ytop],\
@@ -3106,9 +3155,9 @@ class shap_conf():
         plt.scatter(self.uv_uvtot_wd_vol,self.shap_wd_vol,c=self.event_wd,marker='s',\
                     linewidths=0.5,edgecolors='black',s=volume_size_wd,\
                     cmap=plt.cm.get_cmap(colormap,4),vmin=1,vmax=4)
-#        plt.text(1.1, 0, 'A', fontsize = 20)
-#        plt.text(1.5, 5, 'B', fontsize = 20)   
-#        plt.text(0.1, 10, 'C', fontsize = 20) 
+        # plt.text(1.1, 0, 'A', fontsize = 20)
+        # plt.text(1.5, 5, 'B', fontsize = 20)   
+        # plt.text(0.1, 10, 'C', fontsize = 20) 
         plt.text(0.5, 0, 'A', fontsize = 20)
         plt.text(1.5, 2.1, 'B', fontsize = 20)   
         plt.text(0.5, 4.3, 'C', fontsize = 20) 
@@ -3154,9 +3203,7 @@ class shap_conf():
         cb.ax.set_yticklabels(['Outward\ninteraction','Ejection',\
                                'Inward\ninteraction','Sweep'],fontsize=fs-4)
         plt.savefig('../../results/Simulation_3d/uvvoluvoltot_SHAPvol_'+colormap+'_30+.png')
-    
-    
-            
+   
     def plot_shaps_uv_ejectionover(self,colormap='viridis'):
         """ 
         Function for plotting the results of the SHAP vs the Reynolds stress
@@ -3306,9 +3353,7 @@ class shap_conf():
         cb.ax.set_yticklabels(['Outward\ninteraction','Ejection',\
                                'Inward\ninteraction','Sweep'],fontsize=fs-4)
         plt.savefig('../../results/Simulation_3d/uvvoluvoltot_SHAPvolq2_'+colormap+'_30+.png')
-    
-    
-           
+     
     def plot_shaps_uv_pdf_hist(self,colormap='viridis',bin_num=100,lev_val=2.5):
         """ 
         Function for plotting the results of the SHAP vs the Reynolds stress
@@ -3427,11 +3472,6 @@ class shap_conf():
         plt.legend(handles,labels,fontsize=fs-4,loc='center left', bbox_to_anchor=(1, 0.5))
         plt.tight_layout()
         plt.savefig('../../results/Simulation_3d/hist2d_uvuvtotvol_SHAPvol_'+colormap+'_30+.png')
-        
-    
-
-    
-    
         
     def plot_shaps_uv_pdf(self,colormap='viridis',bin_num=100,lev_val=2.5,alf=0.5):
         """ 
@@ -3612,9 +3652,7 @@ class shap_conf():
         plt.legend(handles,labels,fontsize=fs-4,loc='center left', bbox_to_anchor=(1, 0.5))
         plt.tight_layout()
         plt.savefig('../../results/Simulation_3d/hist2d_interp_uvuvtotvol_SHAPvol_'+colormap+'_30+.png')
-        
-      
-                
+          
     def plot_shaps_uv_pdf_probability(self,colormap='viridis',bin_num=100,lev_val=2.5,alf=0.5):
         """ 
         Function for plotting the results of the SHAP vs the Reynolds stress
@@ -3939,10 +3977,7 @@ class shap_conf():
         cb.ax.set_ylabel('$N/N_{tot}$',fontsize=fs)
         plt.tick_params(axis='both', which='major', labelsize=fs)
         plt.savefig('../../results/Simulation_3d/hist2d_interp_uvuvtotvol_SHAPvol_'+colormap+'_30+_Q4.png')
-
-        
-        
-               
+       
     def plot_shaps_uv_pdf_perclim2(self,colormap='viridis',bin_num=100,per_val=0.1,per_val_vol=0.1,alf=0.5):
         """ 
         Function for plotting the results of the SHAP vs the Reynolds stress
@@ -4124,9 +4159,6 @@ class shap_conf():
         plt.legend(handles,labels,fontsize=fs-4,loc='center left', bbox_to_anchor=(1, 0.5))
         plt.tight_layout()
         plt.savefig('../../results/Simulation_3d/hist2d_interp_uvuvtotvol_SHAPvol_'+colormap+'_30+.png')
-        
-   
-        
         
     def plot_shaps_uv_pdf_perclim(self,colormap='viridis',bin_num=100,per_val=0.1,per_val_vol=0.1,alf=0.5,log=True):
         """ 
@@ -4372,8 +4404,7 @@ class shap_conf():
         plt.legend(handles,labels,fontsize=fs-4,loc='center left', bbox_to_anchor=(1, 0.5))
         plt.tight_layout()
         plt.savefig('../../results/Simulation_3d/hist2d_interp_uvuvtotvol_SHAPvol_'+colormap+'_30+.png')
-        
-        
+             
     def plot_shaps_uv_pdf_wall(self,colormap='viridis',bin_num=100,lev_val=2.5,alf=0.5):
         """ 
         Function for plotting the results of the SHAP vs the Reynolds stress
@@ -4820,8 +4851,7 @@ class shap_conf():
         plt.legend(handles,labels,fontsize=fs-4,loc='center left', bbox_to_anchor=(1, 0.5))
         plt.tight_layout()
         plt.savefig('../../results/Simulation_3d/hist2d_interp_uvuvtotvol_SHAPvol_'+colormap+'_30+_walldettach.png')
-        
-        
+            
     def plot_shaps_uv_pdf_wall_perclim2(self,colormap='viridis',bin_num=100,per_val=0.1,per_val_vol=0.1,alf=0.5):
         """ 
         Function for plotting the results of the SHAP vs the Reynolds stress
@@ -5272,8 +5302,6 @@ class shap_conf():
         plt.legend(handles,labels,fontsize=fs-4,loc='center left', bbox_to_anchor=(1, 0.5))
         plt.tight_layout()
         plt.savefig('../../results/Simulation_3d/hist2d_interp_uvuvtotvol_SHAPvol_'+colormap+'_30+_walldettach.png')
-        
-
         
     def plot_shaps_uv_pdf_wall_perclim(self,colormap='viridis',bin_num=100,per_val=0.1,per_val_vol=0.1,alf=0.5,log=False):
         """ 
@@ -5863,9 +5891,6 @@ class shap_conf():
         plt.tight_layout()
         plt.savefig('../../results/Simulation_3d/hist2d_interp_uvuvtotvol_SHAPvol_'+colormap+'_30+_walldettach.png')
         
-
-
-    
     def plot_shaps_kde(self,colormap='viridis',fit_bw=False):
         """ 
         Function for plotting the results of the SHAP vs the Reynolds stress
@@ -6244,9 +6269,7 @@ class shap_conf():
         ax.set_ylim([1e-4,1e0])
         plt.legend(fontsize=20, bbox_to_anchor=(1, 1))
         ax.grid()  
-        plt.savefig('../../results/Simulation_3d/kde_SHAPvoljoin_'+colormap+'_30+.png')
-        
-        
+        plt.savefig('../../results/Simulation_3d/kde_SHAPvoljoin_'+colormap+'_30+.png')   
             
     def plot_shaps_AR(self,colormap='viridis'):
         """ 
@@ -6403,10 +6426,7 @@ class shap_conf():
         cb.ax.set_ylabel(self.clabel_shap_vol,fontsize=fs)  
         plt.tick_params(axis='both',which='major',labelsize=fs) 
         plt.savefig('../../results/Simulation_3d/AR_SHAPvol4_'+colormap+'_30+.png')
-         
-
-
-          
+               
     def plot_shaps_total(self,colormap='viridis'):
         """
         Function for calculating the SHAP contribution of each kind of 
@@ -6481,9 +6501,7 @@ class shap_conf():
             file_save.close()
         except:
             pass
-            
-            
-          
+        
     def plot_shaps_total_noback(self,start=1,end=2,step=1,\
                                 file='../SHAP_fields_io/PIV',\
                                 fileQ='../Q_fields_io/PIV',\
@@ -6559,7 +6577,3 @@ class shap_conf():
         except:
             pass
             
-            
-
-
-          

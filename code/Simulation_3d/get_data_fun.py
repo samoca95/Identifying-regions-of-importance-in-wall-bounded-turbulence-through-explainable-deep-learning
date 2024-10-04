@@ -837,7 +837,7 @@ class get_data_norm():
             hf.create_dataset('Qs', data=uv_str.mat_struc)
             # Type of event asociated to each point of the domain (ny, nz, nx)
             hf.create_dataset('Qs_event', data=uv_str.mat_event)
-            # Structure associated to each point of the domain (ny, nz, nx)
+            # Structure number associated to each point of the domain (ny, nz, nx)
             hf.create_dataset('Qs_segment', data=uv_str.mat_segment)
             # Streamwise dimension of each structure (n_str,)
             hf.create_dataset('dx', data=uv_str.dx)
@@ -1218,6 +1218,7 @@ class uvstruc():
         self.cdg_y = np.array(file['cdg_y'])
         self.cdg_z = np.array(file['cdg_z'])
         self.event = np.array(file['event'])
+        # If you want to apply padding, it is done after readding
         if padpix > 0:
             fshape = mat_struc.shape
             dim0 = fshape[0]
