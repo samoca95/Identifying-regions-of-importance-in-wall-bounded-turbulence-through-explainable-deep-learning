@@ -796,7 +796,7 @@ class get_data_norm():
         # The heavyside is a step function being used as an "iso-volume"
         #                       0  if x1 < 0
         # heavyside(x1, x2) =  x2  if x1 == 0
-        #                       0  if x1 > 0
+        #                       1  if x1 > 0
         mat_struc = np.heaviside(uv-Hperc*uvi.reshape(-1,1,1),0)
 
         # Calculate the structure's properties based on the Q event structure obtained
